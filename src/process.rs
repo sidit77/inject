@@ -1,9 +1,10 @@
 use std::mem::size_of;
+
 use anyhow::{Context, Result};
 use widestring::U16Str;
+use windows::core::Result as WinResult;
 use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES, HANDLE};
 use windows::Win32::System::Diagnostics::ToolHelp::*;
-use windows::core::Result as WinResult;
 
 struct ToolHelpSnapshot(HANDLE);
 
@@ -18,7 +19,9 @@ impl ToolHelpSnapshot {
             dwSize: size_of::<PROCESSENTRY32W>() as u32,
             ..Default::default()
         };
-        unsafe { Process32NextW(self.0, &mut entry).ok()?; }
+        unsafe {
+            Process32NextW(self.0, &mut entry).ok()?;
+        }
         Ok(entry)
     }
     fn next_module(&self) -> WinResult<MODULEENTRY32W> {
@@ -42,11 +45,11 @@ impl Drop for ToolHelpSnapshot {
     }
 }
 
-
 pub struct ProcessIter(ToolHelpSnapshot);
 
 impl ProcessIter {
     pub fn new() -> Result<Self> {
+        #[rustfmt::skip]
         let snapshot = ToolHelpSnapshot::new(TH32CS_SNAPPROCESS, 0)
             .context("Failed to take snapshot of current process list")?;
         Ok(Self(snapshot))
@@ -69,7 +72,6 @@ impl Iterator for ProcessIter {
 pub struct Process(PROCESSENTRY32W);
 
 impl Process {
-
     pub fn pid(&self) -> u32 {
         self.0.th32ProcessID
     }
@@ -77,13 +79,13 @@ impl Process {
     pub fn name(&self) -> &U16Str {
         make_str(&self.0.szExeFile)
     }
-
 }
 
 pub struct ModuleIter(ToolHelpSnapshot);
 
 impl ModuleIter {
     pub fn new(pid: u32) -> Result<Self> {
+        #[rustfmt::skip]
         let snapshot = ToolHelpSnapshot::new(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
             .context("Failed to take snapshot of current module list")?;
         Ok(Self(snapshot))
@@ -105,18 +107,12 @@ impl Iterator for ModuleIter {
 pub struct Module(MODULEENTRY32W);
 
 impl Module {
-
     pub fn name(&self) -> &U16Str {
         make_str(&self.0.szModule)
     }
-
 }
 
-
 fn make_str(data: &[u16]) -> &U16Str {
-    let len = data
-        .iter()
-        .take_while(|c| **c != 0)
-        .count();
+    let len = data.iter().take_while(|c| **c != 0).count();
     U16Str::from_slice(&data[..len])
 }

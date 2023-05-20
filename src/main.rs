@@ -1,12 +1,12 @@
-mod process;
 mod args;
+mod process;
 
 use anyhow::Result;
 use clap::Parser;
 use log::LevelFilter;
+
 use crate::args::Args;
 use crate::process::ModuleIter;
-
 
 fn main() -> Result<()> {
     let args = Args::parse();
