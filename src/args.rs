@@ -1,6 +1,9 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
+use anyhow::{Context, Result};
+use widestring::U16String;
+use crate::process::ProcessIter;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
@@ -29,4 +32,30 @@ pub struct Args {
     pub path: PathBuf,
     /// The process name
     pub process: OsString,
+}
+
+impl Args {
+
+    pub fn pid(&self) -> Result<u32> {
+        match self.pid {
+            true => {
+                log::trace!("Interpreting <PROCESS> as pid");
+                let pid = self
+                    .process
+                    .to_string_lossy()
+                    .parse()?;
+                Ok(pid)
+            },
+            false => {
+                let name = U16String::from_os_str(&self.process);
+                log::trace!("Searching for process with name: {}", name.display());
+                let pid = ProcessIter::new()?
+                    .find(|p| p.name() == name)
+                    .context("Can not find specified process")?
+                    .pid();
+                Ok(pid)
+            }
+        }
+    }
+
 }
