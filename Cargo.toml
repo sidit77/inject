@@ -10,6 +10,7 @@ anyhow = { version = "1", features = ["backtrace"] }
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
 env_logger = { version = "0.10", default-features = false, features = ["auto-color"] }
+widestring = "1"
 windows = { version = "0.48", features = [
     "Win32_Foundation",
     "Win32_System_Diagnostics_ToolHelp"

@@ -1,9 +1,11 @@
-//mod process;
+mod process;
 mod args;
 
 use clap::Parser;
 use log::LevelFilter;
+use widestring::U16String;
 use crate::args::Args;
+use crate::process::ProcessIter;
 
 
 fn main() {
@@ -14,6 +16,9 @@ fn main() {
         .init();
 
     log::info!("Test");
-
-    println!("{:?}", args);
+    let process = U16String::from_os_str(&args.process);
+    ProcessIter::new()
+        .unwrap()
+        .filter(|p| p.name() == process)
+        .for_each(|p| log::info!("{}: {}", p.pid(), p.name().display()));
 }
