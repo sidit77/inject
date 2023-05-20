@@ -5,7 +5,7 @@ use clap::Parser;
 use log::LevelFilter;
 use widestring::U16String;
 use crate::args::Args;
-use crate::process::ProcessIter;
+use crate::process::{ModuleIter, ProcessIter};
 
 
 fn main() {
@@ -20,5 +20,7 @@ fn main() {
     ProcessIter::new()
         .unwrap()
         .filter(|p| p.name() == process)
-        .for_each(|p| log::info!("{}: {}", p.pid(), p.name().display()));
+        .take(1)
+        .flat_map(|p| ModuleIter::new(p.pid()).unwrap())
+        .for_each(|p| log::info!("{}", p.name().display()));
 }
