@@ -3,7 +3,7 @@ use std::mem::size_of_val;
 use anyhow::{Context, ensure, Error, Result};
 use bytemuck::{cast_slice, Pod};
 use windows::core::Error as WinError;
-use windows::Win32::Foundation::{CloseHandle, FALSE, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, FALSE, HANDLE, WAIT_FAILED, WAIT_OBJECT_0};
 use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
 use windows::Win32::System::Memory::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx};
 use windows::Win32::System::Threading::*;
@@ -90,6 +90,10 @@ impl<'a> ProcessMemory<'a> {
         Ok(())
     }
 
+    pub fn to_ptr(&self) -> *const c_void {
+        self.ptr
+    }
+
 }
 
 impl<'a> Drop for ProcessMemory<'a> {
@@ -103,5 +107,58 @@ impl<'a> Drop for ProcessMemory<'a> {
                 MEM_RELEASE
             ).ok().unwrap_or_else(|err| log::warn!("Failed to free process memory: {}", err))
         };
+    }
+}
+
+
+pub struct ProcessThread(HANDLE);
+
+impl ProcessThread {
+
+    pub fn spawn(process: &ProcessHandle, func: LPTHREAD_START_ROUTINE, data: Option<*const c_void>) -> Result<Self> {
+        log::trace!("Trying to spawn remote thread");
+        let mut thread_id = 0;
+        let handle = unsafe {
+            CreateRemoteThread(
+                process.0,
+                None,
+                0,
+                func,
+                data,
+                0,
+                Some(&mut thread_id)
+            ).ok().context("Failed to spawn remote thread")?
+        };
+        log::debug!("Remote thread id is 0x{:x}", thread_id);
+        Ok(Self(handle))
+    }
+
+    pub fn join(self) -> Result<u32> {
+        unsafe {
+            match WaitForSingleObject(self.0, INFINITE) {
+                WAIT_OBJECT_0 => {
+                    let mut exit_code = 0;
+                    GetExitCodeThread(self.0, &mut exit_code)
+                        .ok()
+                        .context("Failed to get exit code for remote thread")?;
+                    Ok(exit_code)
+                },
+                WAIT_FAILED => Err(WinError::from_win32().into()),
+                _ => unreachable!()
+            }
+        }
+    }
+
+}
+
+impl Drop for ProcessThread {
+    fn drop(&mut self) {
+        log::trace!("Closing remote thread handle");
+        unsafe {
+            CloseHandle(self.0)
+                .ok()
+                .unwrap_or_else(|err| log::warn!("Failed to close remote thread handle: {}", err))
+        }
+
     }
 }

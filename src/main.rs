@@ -1,13 +1,15 @@
 mod args;
 mod toolhelp;
 mod process;
+mod functions;
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use clap::Parser;
 use log::LevelFilter;
 
 use crate::args::Args;
-use crate::process::{ProcessHandle, ProcessMemory};
+use crate::functions::LOAD_LIBRARY_W;
+use crate::process::{ProcessHandle, ProcessMemory, ProcessThread};
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -24,6 +26,8 @@ fn main() -> Result<()> {
 
     let process = ProcessHandle::open(pid)?;
     let memory = ProcessMemory::new(&process, args.final_path()?.as_slice_with_nul())?;
+    let thread = ProcessThread::spawn(&process, *LOAD_LIBRARY_W, Some(memory.to_ptr()))?;
+    ensure!(thread.join()? != 0, "Failed to load library");
 
     //for module in ModuleIter::new(pid)? {
     //    log::info!("{}", module.name().display());
