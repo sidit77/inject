@@ -1,7 +1,7 @@
 mod args;
-mod toolhelp;
-mod process;
 mod functions;
+mod process;
+mod toolhelp;
 
 use anyhow::{ensure, Result};
 use clap::Parser;

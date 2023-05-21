@@ -63,7 +63,10 @@ impl Args {
 
     pub fn copy_path(&self) -> Option<&PathBuf> {
         match self.copy {
-            true => Some(self.copy_path.get_or_init(|| self.path.with_extension("copy.dll"))),
+            true => Some(
+                self.copy_path
+                    .get_or_init(|| self.path.with_extension("copy.dll"))
+            ),
             false => None
         }
     }
@@ -76,16 +79,13 @@ impl Args {
     }
 
     pub fn final_path(&self) -> Result<&U16CStr> {
-        let buf= self
-            .final_path
-            .get_or_try_init(|| self
-                .copy_path()
+        let buf = self.final_path.get_or_try_init(|| {
+            self.copy_path()
                 .unwrap_or(&self.path)
                 .canonicalize()
                 .context("Failed to find DLL file")
-                .and_then(|path| U16CString::from_os_str(path.into_os_string())
-                    .context("Invalid path")))?;
+                .and_then(|path| U16CString::from_os_str(path.into_os_string()).context("Invalid path"))
+        })?;
         Ok(buf)
     }
-
 }
