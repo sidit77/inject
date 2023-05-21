@@ -1,8 +1,9 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
+use once_cell::unsync::OnceCell;
 use widestring::U16String;
 
 use crate::process::ProcessIter;
@@ -32,7 +33,12 @@ pub struct Args {
     /// The path of the DLL file
     pub path: PathBuf,
     /// The process name
-    pub process: OsString
+    pub process: OsString,
+
+    #[arg(skip)]
+    copy_path: OnceCell<PathBuf>,
+    #[arg(skip)]
+    final_path: OnceCell<PathBuf>
 }
 
 impl Args {
@@ -54,4 +60,30 @@ impl Args {
             }
         }
     }
+
+    pub fn copy_path(&self) -> Option<&PathBuf> {
+        match self.copy {
+            true => Some(self.copy_path.get_or_init(|| self.path.with_extension("copy.dll"))),
+            false => None
+        }
+    }
+
+    pub fn copy_dll(&self) -> Result<()> {
+        if let Some(copy_path) = self.copy_path() {
+            std::fs::copy(&self.path, copy_path)?;
+        }
+        Ok(())
+    }
+
+    pub fn final_path(&self) -> Result<&Path> {
+        let buf= self
+            .final_path
+            .get_or_try_init(|| self
+                .copy_path()
+                .unwrap_or(&self.path)
+                .canonicalize()
+                .context("Failed to find DLL file"))?;
+        Ok(buf.as_path())
+    }
+
 }

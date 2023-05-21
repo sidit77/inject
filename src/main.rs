@@ -15,6 +15,9 @@ fn main() -> Result<()> {
         .format_target(false)
         .init();
 
+    args.copy_dll()?;
+    log::info!("DLL path: {}", args.final_path()?.display());
+
     let pid = args.pid()?;
     log::info!("Listing module of pid {}", pid);
 
