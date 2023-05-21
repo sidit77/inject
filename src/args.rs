@@ -85,6 +85,10 @@ impl Args {
                 .canonicalize()
                 .context("Failed to find DLL file")
                 .and_then(|path| U16CString::from_os_str(path.into_os_string()).context("Invalid path"))
+                .map(|path| {
+                    log::debug!("Resolved DLL path to {}", path.display());
+                    path
+                })
         })?;
         Ok(buf)
     }

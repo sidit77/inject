@@ -3,7 +3,7 @@ use std::mem::size_of;
 use anyhow::{Context, Result};
 use widestring::U16Str;
 use windows::core::Result as WinResult;
-use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES, HANDLE, HMODULE};
 use windows::Win32::System::Diagnostics::ToolHelp::*;
 
 struct ToolHelpSnapshot(HANDLE);
@@ -111,6 +111,12 @@ pub struct Module(MODULEENTRY32W);
 impl Module {
     pub fn name(&self) -> &U16Str {
         make_str(&self.0.szModule)
+    }
+    pub fn path(&self) -> &U16Str {
+        make_str(&self.0.szExePath)
+    }
+    pub fn handle(&self) -> HMODULE {
+        self.0.hModule
     }
 }
 

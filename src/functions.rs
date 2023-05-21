@@ -10,3 +10,8 @@ pub static LOAD_LIBRARY_W: Lazy<LPTHREAD_START_ROUTINE> = Lazy::new(|| unsafe {
     let func = GetProcAddress(*KERNEL32, s!("LoadLibraryW")).expect("Failed to get the address of LoadLibraryW");
     std::mem::transmute(func)
 });
+
+pub static FREE_LIBRARY: Lazy<LPTHREAD_START_ROUTINE> = Lazy::new(|| unsafe {
+    let func = GetProcAddress(*KERNEL32, s!("FreeLibrary")).expect("Failed to get the address of FreeLibrary");
+    std::mem::transmute(func)
+});
