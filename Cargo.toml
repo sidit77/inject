@@ -1,7 +1,9 @@
 [package]
+authors = ["sidit77 <sidit77@gmail.com>"]
 name = "inject"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+license = "MIT"
 
 [workspace]
 members = [
@@ -26,3 +28,7 @@ windows = { version = "0.48", features = [
     "Win32_System_Memory",
     "Win32_System_Threading"
 ]}
+
+[profile.release]
+lto = true
+codegen-units = 1
