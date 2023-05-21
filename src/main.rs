@@ -7,7 +7,7 @@ use clap::Parser;
 use log::LevelFilter;
 
 use crate::args::Args;
-use crate::toolhelp::ModuleIter;
+use crate::process::{ProcessHandle, ProcessMemory};
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -22,8 +22,11 @@ fn main() -> Result<()> {
     let pid = args.pid()?;
     log::info!("Listing module of pid {}", pid);
 
-    for module in ModuleIter::new(pid)? {
-        log::info!("{}", module.name().display());
-    }
+    let process = ProcessHandle::open(pid)?;
+    let memory = ProcessMemory::new(&process, args.final_path()?.as_slice_with_nul())?;
+
+    //for module in ModuleIter::new(pid)? {
+    //    log::info!("{}", module.name().display());
+    //}
     Ok(())
 }

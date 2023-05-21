@@ -1,10 +1,10 @@
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use once_cell::unsync::OnceCell;
-use widestring::U16String;
+use widestring::{U16CStr, U16CString, U16String};
 
 use crate::toolhelp::ProcessIter;
 
@@ -38,7 +38,7 @@ pub struct Args {
     #[arg(skip)]
     copy_path: OnceCell<PathBuf>,
     #[arg(skip)]
-    final_path: OnceCell<PathBuf>
+    final_path: OnceCell<U16CString>
 }
 
 impl Args {
@@ -75,15 +75,17 @@ impl Args {
         Ok(())
     }
 
-    pub fn final_path(&self) -> Result<&Path> {
+    pub fn final_path(&self) -> Result<&U16CStr> {
         let buf= self
             .final_path
             .get_or_try_init(|| self
                 .copy_path()
                 .unwrap_or(&self.path)
                 .canonicalize()
-                .context("Failed to find DLL file"))?;
-        Ok(buf.as_path())
+                .context("Failed to find DLL file")
+                .and_then(|path| U16CString::from_os_str(path.into_os_string())
+                    .context("Invalid path")))?;
+        Ok(buf)
     }
 
 }

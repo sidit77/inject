@@ -1,118 +1,107 @@
-use std::mem::size_of;
+use std::ffi::c_void;
+use std::mem::size_of_val;
+use anyhow::{Context, ensure, Error, Result};
+use bytemuck::{cast_slice, Pod};
+use windows::core::Error as WinError;
+use windows::Win32::Foundation::{CloseHandle, FALSE, HANDLE};
+use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+use windows::Win32::System::Memory::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx};
+use windows::Win32::System::Threading::*;
 
-use anyhow::{Context, Result};
-use widestring::U16Str;
-use windows::core::Result as WinResult;
-use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES, HANDLE};
-use windows::Win32::System::Diagnostics::ToolHelp::*;
+pub struct ProcessHandle(HANDLE);
 
-struct ToolHelpSnapshot(HANDLE);
+impl ProcessHandle {
 
-impl ToolHelpSnapshot {
-    fn new(flags: CREATE_TOOLHELP_SNAPSHOT_FLAGS, pid: u32) -> WinResult<Self> {
-        log::trace!("Creating a toolhelp snapshot");
-        let snapshot = unsafe { CreateToolhelp32Snapshot(flags, pid)? };
-        Ok(Self(snapshot))
-    }
-    fn next_process(&self) -> WinResult<PROCESSENTRY32W> {
-        let mut entry = PROCESSENTRY32W {
-            dwSize: size_of::<PROCESSENTRY32W>() as u32,
-            ..Default::default()
+    pub fn open(pid: u32) -> Result<Self> {
+        log::trace!("Trying to open process with pid {}", pid);
+        let handle = unsafe {
+            OpenProcess(
+                PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
+                FALSE,
+                pid
+            ).context("Failed to open process")?
         };
-        unsafe {
-            Process32NextW(self.0, &mut entry).ok()?;
-        }
-        Ok(entry)
+        log::debug!("Process handle is 0x{:x}", handle.0);
+        Ok(Self(handle))
     }
-    fn next_module(&self) -> WinResult<MODULEENTRY32W> {
-        let mut entry = MODULEENTRY32W {
-            dwSize: size_of::<MODULEENTRY32W>() as u32,
-            ..Default::default()
-        };
-        unsafe {
-            Module32NextW(self.0, &mut entry).ok()?;
-        }
-        Ok(entry)
-    }
+
 }
 
-impl Drop for ToolHelpSnapshot {
+impl Drop for ProcessHandle {
     fn drop(&mut self) {
-        log::trace!("Closing toolhelp snapshot");
-        if let Err(err) = unsafe { CloseHandle(self.0).ok() } {
-            log::warn!("Failed to close toolhelp snapshot: {}", err);
+        log::trace!("Closing process handle");
+        unsafe {
+            CloseHandle(self.0)
+                .ok()
+                .unwrap_or_else(|err| log::warn!("Failed to close process handle: {}", err))
         }
+
     }
 }
 
-pub struct ProcessIter(ToolHelpSnapshot);
 
-impl ProcessIter {
-    pub fn new() -> Result<Self> {
-        #[rustfmt::skip]
-        let snapshot = ToolHelpSnapshot::new(TH32CS_SNAPPROCESS, 0)
-            .context("Failed to take snapshot of current process list")?;
-        Ok(Self(snapshot))
-    }
+pub struct ProcessMemory<'a> {
+    ptr: *mut c_void,
+    len: usize,
+    process: &'a ProcessHandle
 }
 
-impl Iterator for ProcessIter {
-    type Item = Process;
+impl<'a> ProcessMemory<'a> {
+    pub fn new<T: Pod>(process: &'a ProcessHandle, data: &[T]) -> Result<Self> {
+        let memory = Self::alloc(process,size_of_val(data))?;
+        memory.write(data)?;
+        Ok(memory)
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next_process() {
-            Ok(entry) => Some(Process(entry)),
-            Err(err) if err.code() == ERROR_NO_MORE_FILES.into() => None,
-            Err(err) => panic!("{}", err)
+    pub fn alloc(process: &'a ProcessHandle, size: usize) -> Result<Self> {
+        log::trace!("Attempting to allocate {} bytes", size);
+
+        let ptr = unsafe {
+            VirtualAllocEx(
+                process.0,
+                None,
+                size,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE
+            )
+        };
+        ensure!(!ptr.is_null(), Error::new(WinError::from_win32()).context("Failed to allocate process memory"));
+
+        Ok(Self {
+            ptr,
+            len: size,
+            process
+        })
+    }
+
+    pub fn write<T: Pod>(&self, data: &[T]) -> Result<()> {
+        let bytes: &[u8] = cast_slice(data);
+        log::trace!("Attempting to write {} bytes to process memory", bytes.len());
+        ensure!(bytes.len() <= self.len, "Too many elements");
+        unsafe {
+            WriteProcessMemory(
+                self.process.0,
+                self.ptr,
+                bytes.as_ptr() as _,
+                bytes.len(),
+                None
+            ).ok().context("Failed to write process memory")?;
         }
+        Ok(())
     }
+
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub struct Process(PROCESSENTRY32W);
-
-impl Process {
-    pub fn pid(&self) -> u32 {
-        self.0.th32ProcessID
+impl<'a> Drop for ProcessMemory<'a> {
+    fn drop(&mut self) {
+        log::trace!("Freeing process memory");
+        unsafe {
+            VirtualFreeEx(
+                self.process.0,
+                self.ptr,
+                0,
+                MEM_RELEASE
+            ).ok().unwrap_or_else(|err| log::warn!("Failed to free process memory: {}", err))
+        };
     }
-
-    pub fn name(&self) -> &U16Str {
-        make_str(&self.0.szExeFile)
-    }
-}
-
-pub struct ModuleIter(ToolHelpSnapshot);
-
-impl ModuleIter {
-    pub fn new(pid: u32) -> Result<Self> {
-        #[rustfmt::skip]
-        let snapshot = ToolHelpSnapshot::new(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid)
-            .context("Failed to take snapshot of current module list")?;
-        Ok(Self(snapshot))
-    }
-}
-
-impl Iterator for ModuleIter {
-    type Item = Module;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next_module() {
-            Ok(entry) => Some(Module(entry)),
-            Err(err) if err.code() == ERROR_NO_MORE_FILES.into() => None,
-            Err(err) => panic!("{}", err)
-        }
-    }
-}
-
-pub struct Module(MODULEENTRY32W);
-
-impl Module {
-    pub fn name(&self) -> &U16Str {
-        make_str(&self.0.szModule)
-    }
-}
-
-fn make_str(data: &[u16]) -> &U16Str {
-    let len = data.iter().take_while(|c| **c != 0).count();
-    U16Str::from_slice(&data[..len])
 }

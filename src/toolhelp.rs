@@ -39,8 +39,10 @@ impl ToolHelpSnapshot {
 impl Drop for ToolHelpSnapshot {
     fn drop(&mut self) {
         log::trace!("Closing toolhelp snapshot");
-        if let Err(err) = unsafe { CloseHandle(self.0).ok() } {
-            log::warn!("Failed to close toolhelp snapshot: {}", err);
+        unsafe {
+            CloseHandle(self.0)
+                .ok()
+                .unwrap_or_else(|err| log::warn!("Failed to close toolhelp snapshot: {}", err));
         }
     }
 }
