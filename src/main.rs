@@ -5,7 +5,7 @@ mod toolhelp;
 
 use anyhow::{ensure, Result};
 use clap::Parser;
-use log::{Level, LevelFilter};
+use log::Level;
 use widestring::U16CStr;
 
 use crate::args::{Args, Mode};
@@ -16,7 +16,7 @@ use crate::toolhelp::ModuleIter;
 fn main() -> Result<()> {
     let args = Args::parse();
     env_logger::Builder::new()
-        .filter_level(LevelFilter::Trace)
+        .filter_level(args.level.into())
         .format_target(false)
         .init();
 

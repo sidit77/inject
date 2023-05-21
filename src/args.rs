@@ -3,10 +3,21 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
+use log::LevelFilter;
 use once_cell::unsync::OnceCell;
 use widestring::{U16CStr, U16CString, U16String};
 
 use crate::toolhelp::ProcessIter;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+pub enum Level {
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
@@ -30,6 +41,9 @@ pub struct Args {
     /// What mode to run the program in
     #[arg(long, short, value_enum, default_value_t = Mode::Inject)]
     pub mode: Mode,
+    /// The log level
+    #[arg(long, short, value_enum, default_value_t = Level::Info)]
+    pub level: Level,
     /// The path of the DLL file
     pub path: PathBuf,
     /// The process name
@@ -91,5 +105,18 @@ impl Args {
                 })
         })?;
         Ok(buf)
+    }
+}
+
+impl From<Level> for LevelFilter {
+    fn from(value: Level) -> Self {
+        match value {
+            Level::Off => LevelFilter::Off,
+            Level::Error => LevelFilter::Error,
+            Level::Warn => LevelFilter::Warn,
+            Level::Info => LevelFilter::Info,
+            Level::Debug => LevelFilter::Debug,
+            Level::Trace => LevelFilter::Trace
+        }
     }
 }
