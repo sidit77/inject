@@ -6,7 +6,7 @@ use clap::{Parser, ValueEnum};
 use once_cell::unsync::OnceCell;
 use widestring::U16String;
 
-use crate::process::ProcessIter;
+use crate::toolhelp::ProcessIter;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
